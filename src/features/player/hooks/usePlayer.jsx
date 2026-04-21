@@ -1,46 +1,85 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { play, pause, next ,prev} from "../state/playerSlice";
-
+import { play, pause, next, prev } from "../state/playerSlice";
 
 export let usePlayer = () => {
 
+    const [progress, setProgress] = useState(0);
+    const [currentTime, setCurrentTime] = useState(0);
+    const [duration, setDuration] = useState(0);
+    const [songInfo, setSongInfo] = useState({});
 
-    let [progress, setProgress] = useState(0);
-    let [currentTime, setCurrentTime] = useState(0);
-    let [duration, setDuration] = useState(0);
+    const dispatch = useDispatch();
+    const audioRef = useRef(new Audio());
 
-    let [songInfo, setSongInfo] = useState({})
+    const { currentPlayingSong, isPlaying } = useSelector((store) => store.player);
 
-
-
-    let dispatch = useDispatch()
-    let audioRef = useRef(new Audio());
-    let { currentPlayingSong, isPlaying } = useSelector((store) => store.player)
-
-    //controls play when card button is click
-    useEffect(() => {
-        if (!currentPlayingSong) return;
-        audioRef.current.src = currentPlayingSong.url;
-        audioRef.current.play();
-        setSongInfo({ ...currentPlayingSong })
-    }, [currentPlayingSong])
-
-    //control play and pause on the basis of isPlaying
 
     useEffect(() => {
         if (!currentPlayingSong) return;
+
+        const audio = audioRef.current;
+
+        audio.src = currentPlayingSong.url;
+        audio.play();
+
+        setSongInfo({ ...currentPlayingSong });
+    }, [currentPlayingSong]);
+
+
+    useEffect(() => {
+        if (!currentPlayingSong) return;
+
+        const audio = audioRef.current;
+
         if (isPlaying) {
-            audioRef.current.play();
+            audio.play();
+        } else {
+            audio.pause();
         }
-        else {
-            audioRef.current.pause();
-        }
-    }, [isPlaying])
+    }, [isPlaying]);
 
+    // ⏱ Progress + Auto Next
+    useEffect(() => {
+        const audio = audioRef.current;
 
-    //   call actions play and pause
-    let togglePlayAndPause = () => {
+        const updatedTime = () => {
+            const curr = audio.currentTime;
+            const dur = audio.duration || 0;
+
+            setCurrentTime(curr);
+            setDuration(dur);
+
+            const percentage = dur ? (curr / dur) * 100 : 0;
+            setProgress(percentage);
+        };
+
+        const handleEnded = () => {
+            dispatch(next());
+        };
+
+        audio.addEventListener("timeupdate", updatedTime);
+        audio.addEventListener("ended", handleEnded);
+
+        return () => {
+            audio.removeEventListener("timeupdate", updatedTime);
+            audio.removeEventListener("ended", handleEnded);
+        };
+    }, [dispatch]);
+
+    const progressClick = (e) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const clickX = e.clientX - rect.left;
+        const width = rect.width;
+
+        const audio = audioRef.current;
+
+        if (!audio.duration) return;
+
+        audio.currentTime = (clickX / width) * audio.duration;
+    };
+
+    const togglePlayAndPause = () => {
         if (isPlaying) {
             dispatch(pause());
         } else {
@@ -48,47 +87,17 @@ export let usePlayer = () => {
         }
     };
 
+    const playNextSong = () => dispatch(next());
+    const playPrevSong = () => dispatch(prev());
 
-
-    //ProgressBar
-    useEffect(() => {
-        let updatedTime = () => {
-            setCurrentTime(audioRef.current.currentTime);
-            setDuration(audioRef.current.duration || 0);
-
-            let percentage = (audioRef.current.currentTime / audioRef.current.duration) * 100;
-            setProgress(percentage || 0)
-        };
-
-        audioRef.current.addEventListener("timeupdate", updatedTime);
-
-        return () => {
-            audioRef.current.removeEventListener("timeupdate", updateTime);
-        };
-
-    }, []);
-
-
-
-    //click on progress bar
-    let progressClick = (e) => {
-        let rect = e.currentTarget.getBoundingClientRect();
-        let clickX = e.clientX - rect.left;
-        let width = rect.width;
-
-        let audio = audioRef.current;
-        audio.currentTime = (clickX / width) * audio.duration;
-    }
-
-
-    let playNextSong = () => {
-        dispatch(next())
-    }
-
-    let playPrevSong = () => {
-        dispatch(prev())
-    }
-
-    return { togglePlayAndPause, progress, currentTime, duration, progressClick, songInfo, playNextSong, playPrevSong };
-
-}
+    return {
+        togglePlayAndPause,
+        progress,
+        currentTime,
+        duration,
+        progressClick,
+        songInfo,
+        playNextSong,
+        playPrevSong,
+    };
+};
